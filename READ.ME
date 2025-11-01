@@ -1,0 +1,58 @@
+Palmer Penguins — Aplicação Web com Análise de Dados e Machine Learning
+
+Este projeto é uma aplicação web interativa desenvolvida em Python com Streamlit, criada para atender aos requisitos da disciplina Tópicos Especiais em Software. A aplicação permite análise exploratória de dados e treinamento de modelos de Machine Learning de forma intuitiva. O usuário pode carregar a base padrão Palmer Penguins (um substituto da base "Iris") ou fazer upload do seu próprio arquivo .csv.
+
+Funcionalidades
+
+Upload de Dados: Carregamento de arquivos .csv ou uso do dataset padrão Palmer Penguins.
+
+Visualização Interativa: Geração de gráficos interativos (barras, pizza e dispersão) com Plotly.
+
+Seleção de Modelo de Machine Learning: Escolha entre Árvore de Decisão, KNN, Regressão Logística ou SVM.
+
+Ajuste de Hiperparâmetros: Personalização de parâmetros do modelo (como profundidade da árvore e número de vizinhos K).
+
+Treinamento Dinâmico: Treinamento do modelo em tempo real com exibição de métricas de desempenho (acurácia e matriz de confusão).
+
+Predição Interativa: Inserção de novos dados via sliders para obter instantaneamente a predição da espécie do pinguim.
+
+Tecnologias Utilizadas
+Tecnologia	Finalidade
+Python 3.x	Linguagem principal
+Streamlit	Criação da aplicação web
+Pandas	Manipulação e leitura de dados
+Scikit-learn	Modelagem e métricas de Machine Learning
+Plotly	Criação de gráficos interativos
+Seaborn / Matplotlib	Visualização complementar e matriz de confusão
+Instalação e Execução
+
+Para executar o projeto localmente, siga os passos abaixo.
+
+Primeiro, certifique-se de ter o Python 3.7+
+ instalado em seu sistema. Em seguida, abra um terminal dentro da pasta do projeto e crie um ambiente virtual com o comando:
+
+python -m venv venv
+
+
+Depois, ative o ambiente virtual.
+No Windows (PowerShell), utilize:
+
+.\venv\Scripts\activate
+
+
+No macOS/Linux, utilize:
+
+source venv/bin/activate
+
+
+Com o ambiente virtual ativado, instale as dependências necessárias:
+
+pip install streamlit pandas seaborn plotly scikit-learn matplotlib
+
+
+Por fim, execute o comando abaixo para iniciar a aplicação:
+
+streamlit run app.py
+
+
+A aplicação será iniciada e aberta automaticamente em uma nova aba do navegador, permitindo a análise e exploração dos dados de forma interativa.
