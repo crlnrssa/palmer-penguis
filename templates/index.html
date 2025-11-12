@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palmer Penguins - App Flask</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        /* CSS simples para organizar o layout */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background-color: #f4f4f9; }
+        .container { max-width: 1200px; margin: auto; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 25px; }
+        .full-width { grid-column: 1 / -1; }
+        h1, h2 { color: #333; }
+        h1 { text-align: center; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 30px 0; }
+        form { margin-bottom: 20px; }
+        input[type="file"], input[type="number"], select, button {
+            width: 100%; padding: 10px; margin: 8px 0; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box;
+        }
+        button { background-color: #007bff; color: white; cursor: pointer; font-weight: bold; border-color: #007bff; }
+        button.secondary { background-color: #6c757d; border-color: #6c757d; }
+        .resultado { font-size: 1.2em; font-weight: bold; padding: 15px; border-radius: 5px; }
+        .sucesso { background-color: #e6ffed; border: 1px solid #b7f0c1; color: #004d00; }
+        .predicao { background-color: #e6f7ff; border: 1px solid #b7e8f0; color: #004a4d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐧 Palmer Penguins - Análise e ML com Flask</h1>
+        <hr>
+
+        <section class="grid">
+            <div class="card">
+                <h2>1. Carregar Dados</h2>
+                <p>Faça upload do seu arquivo .csv ou use a base padrão.</p>
+                
+                <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file_csv" accept=".csv" required>
+                    <button type="submit">Enviar CSV</button>
+                </form>
+                
+                <form action="{{ url_for('use_default_data') }}" method="POST">
+                    <button type="submit" class="secondary">Usar Padrão (Penguins)</button>
+                </form>
+
+                {% if nome_arquivo %}
+                    <div class="resultado sucesso">
+                        Arquivo carregado: <strong>{{ nome_arquivo }}</strong>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="card" {% if not nome_arquivo %} style="opacity: 0.5; pointer-events: none;" {% endif %}>
+                <h2>2. Treinar Modelo</h2>
+                <p>Escolha o classificador e seus parâmetros.</p>
+                
+                <form action="{{ url_for('train_model') }}" method="POST">
+                    <label for="classificador">Classificador:</label>
+                    <select name="classificador" id="classificador">
+                        <option value="Árvore de Decisão">Árvore de Decisão</option>
+                        <option value="KNN">KNN</option>
+                        <option value="Regressão Logística">Regressão Logística</option>
+                        <option value="SVM">SVM</option>
+                    </select>
+                    
+                    <label for="profundidade_arvore">Profundidade (Árvore):</label>
+                    <input type="number" name="profundidade_arvore" value="5" min="2" max="20">
+                    
+                    <label for="n_vizinhos_knn">Nº Vizinhos (KNN):</label>
+                    <input type="number" name="n_vizinhos_knn" value="5" min="1" max="15">
+                    
+                    <button type="submit">Treinar Modelo</button>
+                </form>
+
+                {% if acuracia %}
+                    <div class="resultado sucesso">
+                        Modelo treinado com Acurácia de: <strong>{{ acuracia }}</strong>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <hr>
+
+        <section>
+            {% if modelo_pronto %}
+                <div class="card full-width">
+                    <h2>3. Fazer Nova Predição</h2>
+                    <form action="{{ url_for('predict') }}" method="POST" class="grid">
+                        <div>
+                            <label>Comprimento Bico (mm):</label>
+                            <input type="number" step="0.1" name="bill_length" required>
+                        </div>
+                        <div>
+                            <label>Profundidade Bico (mm):</label>
+                            <input type_number" step="0.1" name="bill_depth" required>
+                        </div>
+                        <div>
+                            <label>Comprimento Nadadeira (mm):</label>
+                            <input type="number" step="1" name="flipper_length" required>
+                        </div>
+                        <div>
+                            <label>Massa Corporal (g):</label>
+                            <input type="number" step="1" name="body_mass" required>
+                        </div>
+                        <div class="full-width">
+                            <button type="submit">Prever Espécie</button>
+                        </div>
+                    </form>
+
+                    {% if predicao %}
+                        <div class="resultado predicao">
+                            Espécie Prevista: <strong>{{ predicao }}</strong>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        <section>
+            {% if plot_barra and plot_dispersao %}
+                <hr>
+                <div class="card full-width">
+                    <h2>Visualização dos Dados</h2>
+                    <div class="grid">
+                        <div>{{ plot_barra | safe }}</div>
+                        <div>{{ plot_dispersao | safe }}</div>
+                    </div>
+                </div>
+            {% endif %}
+        </section>
+
+    </div>
+</body>
+</html>

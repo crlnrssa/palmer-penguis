@@ -1,327 +1,226 @@
-# --- 1. Importações ---
-import streamlit as st  
-import pandas as pd  
-import seaborn as sns  
-import matplotlib.pyplot as plt  
-import plotly.express as px  
-from sklearn.model_selection import train_test_split  
-from sklearn.metrics import accuracy_score, confusion_matrix  
-
-# Importa as classes dos modelos de Machine Learning que vamos usar
+import os
+import pandas as pd
+import seaborn as sns
+import plotly.express as px
+import joblib  # Usado para salvar e carregar o modelo treinado
+from flask import Flask, render_template, request, redirect, url_for, session
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
-import warnings  # Usado para ignorar mensagens de aviso
 
-# Ignorar warnings futuros (ex: de versões de bibliotecas)
-warnings.filterwarnings('ignore')
+# Cria a aplicação Flask
+app = Flask(__name__)
 
-# --- 2. Configuração da Página ---
-st.set_page_config(
-    layout="wide",  # Define que a aplicação usará todo o espaço horizontal da tela
-    page_title="Palmer Penguins App",  
-)
+# Chave secreta OBRIGATÓRIA para o Flask 'session' funcionar
+# O 'session' é como um dicionário que "lembra" informações entre os reloads
+app.secret_key = 'sua_chave_secreta_muito_segura_12345'
 
-# --- 3. Funções de Carregamento e ML ---
+# Define caminhos
+UPLOAD_FOLDER = 'uploads'
+MODEL_FOLDER = 'model'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MODEL_FOLDER'] = MODEL_FOLDER
 
-# O '@st.cache_data' é um "decorator" do Streamlit
-# Ele diz ao Streamlit para "lembrar" o resultado desta função
-# se a função for chamada de novo, ele retorna o resultado salvo (em cache)
-# em vez de executar
-@st.cache_data
+# Garante que as pastas existam
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(MODEL_FOLDER, exist_ok=True)
+
+# Define os caminhos dos arquivos que vamos usar
+DATA_PATH = os.path.join(app.config['UPLOAD_FOLDER'], 'data.csv')
+MODEL_PATH = os.path.join(app.config['MODEL_FOLDER'], 'model.joblib')
+
 def carregar_dados_padrao():
-    """Carrega o dataset 'penguins' do Seaborn e faz uma limpeza básica."""
+    """ Carrega os dados padrão (penguins) e salva em 'uploads/data.csv' """
     try:
-        penguins = sns.load_dataset('penguins')
-        penguins = penguins.dropna()  # Remove linhas com valores nulos (NaN)
-        return penguins
+        df = sns.load_dataset('penguins')
+        df = df.dropna()
+        df.to_csv(DATA_PATH, index=False)
+        return True
     except Exception as e:
-        st.error(f"Erro ao carregar dados padrão: {e}")
-        return pd.DataFrame()  # Retorna um DataFrame vazio em caso de erro
+        print(f"Erro ao carregar dados padrão: {e}")
+        return False
 
-def carregar_dados_upload(arquivo_enviado):
-    """Lê um arquivo CSV enviado pelo usuário."""
-    if arquivo_enviado is not None:  # Verifica se um arquivo foi realmente enviado
-        try:
-            df = pd.read_csv(arquivo_enviado)  # Lê o arquivo CSV com o pandas
-            df = df.dropna()  # Remove linhas com valores nulos
-            return df
-        except Exception as e:
-            st.error(f"Erro ao ler o arquivo CSV: {e}")
-            return None
-    return None
+def gerar_graficos(df):
+    """ Gera os gráficos com Plotly e retorna o HTML deles """
+    try:
+        # Gráfico 1: Contagem de Espécies (Barras)
+        fig_barra = px.bar(df, x='species', color='species',
+                           title="Contagem de Espécies")
+        
+        # Gráfico 2: Dispersão (Bico vs Nadadeira)
+        fig_dispersao = px.scatter(df, x='bill_length_mm', y='flipper_length_mm',
+                                   color='species',
+                                   title='Comprimento do Bico vs. Nadadeira')
+        
+        # Converte os gráficos para HTML
+        plot_html_barra = fig_barra.to_html(full_html=False, include_plotlyjs='cdn')
+        plot_html_dispersao = fig_dispersao.to_html(full_html=False, include_plotlyjs='cdn')
+        
+        return plot_html_barra, plot_html_dispersao
+    except Exception as e:
+        print(f"Erro ao gerar gráficos: {e}")
+        return None, None
 
-def get_classificador(nome_classificador):
-    """Cria os widgets de parâmetros na sidebar e retorna o modelo configurado."""
-    # Esta função cria dinamicamente os "sliders" de parâmetros.
-    # Ela só mostra os sliders relevantes para o modelo que o usuário escolheu.
+# --- Rotas do Flask ---
+
+@app.route('/')
+def index():
+    """ Rota principal - O 'painel' da nossa aplicação """
     
-    st.sidebar.subheader(f'Parâmetros do {nome_classificador}')
-    params = {}  # Um dicionário para guardar os parâmetros escolhidos
-    modelo = None
+    # Tenta carregar dados e gráficos se um arquivo existir
+    df = None
+    plot_barra = None
+    plot_dispersao = None
+    
+    if os.path.exists(DATA_PATH):
+        df = pd.read_csv(DATA_PATH)
+        plot_barra, plot_dispersao = gerar_graficos(df)
+        
+    # 'render_template' carrega o 'index.html' e passa variáveis para ele
+    return render_template(
+        'index.html',
+        # Passa o nome do arquivo (se existir) para o HTML
+        nome_arquivo=session.get('nome_arquivo', None),
+        # Passa os gráficos (se existirem) para o HTML
+        plot_barra=plot_barra,
+        plot_dispersao=plot_dispersao,
+        # Passa o resultado do treinamento (se existir) para o HTML
+        acuracia=session.get('acuracia', None),
+        # Passa o resultado da predição (se existir) para o HTML
+        predicao=session.get('predicao', None),
+        # Verifica se o modelo já foi treinado
+        modelo_pronto=os.path.exists(MODEL_PATH)
+    )
 
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    """ Rota para lidar com o upload do CSV """
+    
+    # Pega o arquivo enviado no formulário
+    file = request.files['file_csv']
+    
+    if file.filename == '':
+        return redirect(url_for('index')) # Redireciona se nenhum arquivo foi selecionado
+
+    if file:
+        file.save(DATA_PATH)
+        # Salva o nome do arquivo na 'session' para lembrarmos dele
+        session['nome_arquivo'] = file.filename
+        # Limpa resultados antigos
+        session.pop('acuracia', None)
+        session.pop('predicao', None)
+        if os.path.exists(MODEL_PATH):
+            os.remove(MODEL_PATH) # Remove modelo antigo
+            
+    # Redireciona de volta para a página principal
+    return redirect(url_for('index'))
+
+@app.route('/default_data', methods=['POST'])
+def use_default_data():
+    """ Rota para usar os dados padrão 'penguins' """
+    carregar_dados_padrao()
+    session['nome_arquivo'] = 'penguins_padrao.csv'
+    # Limpa resultados antigos
+    session.pop('acuracia', None)
+    session.pop('predicao', None)
+    if os.path.exists(MODEL_PATH):
+        os.remove(MODEL_PATH) # Remove modelo antigo
+        
+    return redirect(url_for('index'))
+
+@app.route('/train', methods=['POST'])
+def train_model():
+    """ Rota para treinar o modelo de ML """
+    
+    # Pega as escolhas do usuário no formulário de treinamento
+    nome_classificador = request.form['classificador']
+    
+    # Parâmetros
+    profundidade = int(request.form.get('profundidade_arvore', 5))
+    n_vizinhos = int(request.form.get('n_vizinhos_knn', 5))
+    
+    # Carrega os dados que já foram 'uploadados'
+    df = pd.read_csv(DATA_PATH)
+    
+    # Define features (X) e alvo (Y)
+    features = ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']
+    target = 'species'
+    
+    X = df[features]
+    y = df[target]
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+    # Escolhe o modelo baseado na escolha do usuário
     if nome_classificador == "Árvore de Decisão":
-        # st.sidebar.slider(label, min, max, default, step)
-        profundidade = st.sidebar.slider("Profundidade da Árvore", 2, 20, 5, 1)
-        params['max_depth'] = profundidade
-        # 'random_state=42' garante que o modelo seja treinado da mesma forma toda vez (reprodutibilidade)
-        modelo = DecisionTreeClassifier(max_depth=params['max_depth'], random_state=42)
-
-    elif nome_classificador == "KNN (K-Nearest Neighbors)":
-        n_vizinhos = st.sidebar.slider("Número de Vizinhos (K)", 1, 15, 5, 1)
-        params['n_neighbors'] = n_vizinhos
-        modelo = KNeighborsClassifier(n_neighbors=params['n_neighbors'])
-
+        modelo = DecisionTreeClassifier(max_depth=profundidade, random_state=42)
+    elif nome_classificador == "KNN":
+        modelo = KNeighborsClassifier(n_neighbors=n_vizinhos)
     elif nome_classificador == "Regressão Logística":
-        # 'C' é um parâmetro de regularização.
-        C = st.sidebar.slider("Parâmetro C (Regularização)", 0.1, 10.0, 1.0, 0.1)
-        params['C'] = C
-        modelo = LogisticRegression(C=params['C'], random_state=42, max_iter=1000)
-
+        modelo = LogisticRegression(random_state=42, max_iter=1000)
     elif nome_classificador == "SVM":
-        C = st.sidebar.slider("Parâmetro C (Regularização)", 0.1, 10.0, 1.0, 0.1)
-        params['C'] = C
-        # Habilita 'probability=True' para que possamos usar 'predict_proba' mais tarde
-        modelo = SVC(C=params['C'], random_state=42, probability=True)
+        modelo = SVC(random_state=42, probability=True)
+    else:
+        # Padrão
+        modelo = DecisionTreeClassifier(max_depth=5, random_state=42)
 
-    return modelo, params
-
-# --- 4. Título e Introdução ---
-# Comandos 'st.title' e 'st.write' desenham na tela principal da aplicação.
-st.title("Análise e Predição de Pinguins Palmer ")
-st.write("""
-Aplicação web para análise visual e *Machine Learning* usando o dataset Palmer Penguins.
-Explore os dados, visualize as relações e treine modelos para prever as espécies de pinguins.
-""")
-
-# --- 5. Sidebar (Barra Lateral) ---
-# 'st.sidebar' coloca os elementos na barra lateral esquerda.
-
-st.sidebar.header('1. Carregar Dados')
-# 'st.sidebar.file_uploader' cria o widget de upload de arquivos.
-arquivo_enviado = st.sidebar.file_uploader("Upload .csv (Opcional)", type=["csv"])
-
-# Lógica principal de carregamento de dados
-df = None
-if arquivo_enviado is not None:
-    # Se o usuário enviou um arquivo, vai carregar
-    st.sidebar.success("CSV Carregado!")
-    df = carregar_dados_upload(arquivo_enviado)
-else:
-    # Se não, carrega o dataset padrão
-    st.sidebar.info("Usando dataset padrão (Palmer Penguins).")
-    df = carregar_dados_padrao()
-
-# --- 6. Corpo Principal da Aplicação ---
-
-# O 'if df.empty:' é uma verificação de segurança.
-# O resto da aplicação só vai rodar se os dados tiverem sido carregados com sucesso.
-if df.empty:
-    st.error("Nenhum dado para analisar. Faça upload de um CSV ou verifique o carregamento padrão.")
-else:
-    # 'st.dataframe' desenha uma tabela interativa
-    st.header("Visão Geral dos Dados")
-    st.dataframe(df.head())
-
-    # --- 6.1. Análise de Dados e Visualização ---
-    st.header("Análise Exploratória e Visualização")
+    # Treina o modelo
+    modelo.fit(X_train, y_train)
     
-    st.sidebar.header('2. Filtros de Análise')
-    colunas_filtro_cat = ['island', 'sex']
-    filtros = {}
+    # Avalia
+    y_pred = modelo.predict(X_test)
+    acuracia = accuracy_score(y_test, y_pred)
     
-    # Loop para criar os filtros dinamicamente
-    for col in colunas_filtro_cat:
-        if col in df.columns:  # Verifica se a coluna existe no dataframe
-            opcoes = sorted(df[col].unique())
-            # 'st.sidebar.multiselect' cria um menu de seleção múltipla
-            selecionado = st.sidebar.multiselect(f'Filtrar por {col}:', opcoes, default=opcoes)
-            filtros[col] = selecionado
-
-    # Aplica os filtros selecionados no dataframe
-    df_filtrado = df.copy()  # Copia o 'df' original para não alterá-lo
-    for col, selecionado in filtros.items():
-        # Esta é a linha de filtragem do Pandas
-        df_filtrado = df_filtrado[df_filtrado[col].isin(selecionado)]
-
-    st.write(f"Exibindo {df_filtrado.shape[0]} de {df.shape[0]} registros filtrados.")
-
-    # 'st.columns(2)' cria um layout de duas colunas
-    col1, col2 = st.columns(2)
+    # Salva o modelo treinado no disco!
+    # 'joblib' é a forma padrão de salvar modelos do scikit-learn
+    joblib.dump(modelo, MODEL_PATH)
     
-    # 'with col1:' define o que vai entrar na primeira coluna
-    with col1:
-        st.subheader("Gráfico de Barras: Contagem de Espécies")
-        # 'px.bar' cria um gráfico de barras interativo com Plotly
-        fig_barra = px.bar(df_filtrado, x='species', color='species',
-                           title="Contagem de Espécies (Filtrado)")
-        # 'st.plotly_chart' exibe um gráfico Plotly no Streamlit
-        st.plotly_chart(fig_barra, use_container_width=True)
-
-    # 'with col2:' define o que vai entrar na segunda coluna
-    with col2:
-        st.subheader("Gráfico de Pizza: Distribuição por Ilha")
-        df_ilhas = df_filtrado['island'].value_counts().reset_index()
-        fig_pizza = px.pie(df_ilhas, names='island', values='count',
-                           title="Distribuição por Ilha (Filtrado)")
-        st.plotly_chart(fig_pizza, use_container_width=True)
-
-    st.subheader("Gráfico Interativo: Relações entre Variáveis")
-    # Esta seção cumpre o requisito de "flexibilidade", permitindo ao usuário
-    # escolher quais colunas plotar.
-    colunas_numericas = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+    # Salva a acurácia na 'session' para mostrar ao usuário
+    session['acuracia'] = f"{acuracia:.2%}"
     
-    # Tenta definir padrões (se existirem) para uma boa experiência inicial
-    default_x = 'bill_length_mm' if 'bill_length_mm' in colunas_numericas else colunas_numericas[0]
-    default_y = 'flipper_length_mm' if 'flipper_length_mm' in colunas_numericas else colunas_numericas[1]
-    default_color = 'species' if 'species' in df.columns else None
+    return redirect(url_for('index'))
 
-    # Cria 3 colunas para os 3 menus 'selectbox'
-    c1, c2, c3 = st.columns(3)
-    eixo_x = c1.selectbox("Eixo X (Dispersão)", colunas_numericas, index=colunas_numericas.index(default_x))
-    eixo_y = c2.selectbox("Eixo Y (Dispersão)", colunas_numericas, index=colunas_numericas.index(default_y))
-    eixo_cor = c3.selectbox("Cor (Dispersão)", df.columns, index=list(df.columns).index(default_color) if default_color else 0)
-
-    # Cria o gráfico de dispersão com base nas seleções do usuário
-    fig_dispersao = px.scatter(
-        df_filtrado, x=eixo_x, y=eixo_y, color=eixo_cor,
-        hover_data=['island', 'sex'], title=f'{eixo_x} vs. {eixo_y}'
-    )
-    st.plotly_chart(fig_dispersao, use_container_width=True)
-
-    # --- 6.2. Machine Learning (Treinamento) ---
-    st.header("Machine Learning: Previsão de Espécies")
+@app.route('/predict', methods=['POST'])
+def predict():
+    """ Rota para fazer uma nova predição """
     
-    st.sidebar.header('3. Configurar Modelo de ML')
-    
-    # Seleção da coluna Alvo (Y)
-    coluna_alvo_default = 'species' if 'species' in df.columns else df.columns[0]
-    coluna_alvo = st.sidebar.selectbox("Selecione a Coluna Alvo (Y)", df.columns, index=list(df.columns).index(coluna_alvo_default))
-    
-    # Seleção das colunas de Features (X)
-    features_default = ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']
-    features_default_validas = [f for f in features_default if f in colunas_numericas]
-    
-    features_selecionadas = st.sidebar.multiselect(
-        "Selecione as Features (X) (Numéricas)", 
-        options=colunas_numericas, 
-        default=features_default_validas
-    )
+    # Verifica se o modelo já foi treinado e existe
+    if not os.path.exists(MODEL_PATH):
+        return redirect(url_for('index'))
 
-    # Seleção do tipo de Classificador
-    tipo_classificador = st.sidebar.selectbox(
-        "Escolha o Classificador:",
-        ("Árvore de Decisão", "KNN (K-Nearest Neighbors)", "Regressão Logística", "SVM")
-    )
+    # Carrega o modelo salvo do disco
+    modelo = joblib.load(MODEL_PATH)
     
-    # Chama nossa função para buscar o modelo e os sliders de parâmetros
-    modelo, params = get_classificador(tipo_classificador)
-
-    # Botão de Treinamento (Treinamento Dinâmico)
-    # O código dentro deste 'if' SÓ é executado quando o usuário clica no botão.
-    if st.sidebar.button("Treinar Modelo", type="primary"):
-        if not features_selecionadas:
-            st.error("Selecione pelo menos uma 'feature' para treinar o modelo.")
-        else:
-            st.subheader("Resultados do Treinamento")
-            
-            # 1. Preparar dados (X = features, Y = alvo)
-            X = df[features_selecionadas]
-            Y = df[coluna_alvo]
-            
-            # 2. Dividir os dados em conjuntos de treino e teste
-            # test_size=0.3 significa 30% dos dados para teste, 70% para treino
-            # stratify=Y garante que a proporção das classes (espécies) seja a mesma
-            # nos conjuntos de treino e teste. Essencial para classificação.
-            X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, random_state=42, stratify=Y)
-            
-            # 3. Treinar o modelo
-            modelo.fit(X_train, Y_train)
-            
-            # 4. Avaliar o modelo
-            Y_pred = modelo.predict(X_test)
-            acuracia = accuracy_score(Y_test, Y_pred)
-            st.write(f"**Classificador:** {tipo_classificador}")
-            st.write(f"**Acurácia no Teste:** {acuracia:.2%}")
-
-            # 5. Matriz de Confusão
-            st.write("**Matriz de Confusão:**")
-            cm = confusion_matrix(Y_test, Y_pred)
-            labels = sorted(Y.unique())
-            
-            # Cria a figura do Matplotlib
-            fig_cm, ax_cm = plt.subplots()
-            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=labels, yticklabels=labels, ax=ax_cm)
-            ax_cm.set_xlabel('Previsto')
-            ax_cm.set_ylabel('Verdadeiro')
-            # 'st.pyplot' é como o Streamlit exibe gráficos do Matplotlib
-            st.pyplot(fig_cm)
-            
-            # O Streamlit "reroda" o script do zero a cada interação.
-            # Para "lembrar" o modelo treinado, nós o salvamos no 'st.session_state'
-            # O 'session_state' é um dicionário que persiste entre os "reruns"
-            st.session_state['modelo_treinado'] = modelo
-            st.session_state['features_modelo'] = features_selecionadas
-            st.success("Modelo treinado e pronto para predição!")
-
-    # --- 6.3. Predição Dinâmica ---
-    # Esta seção SÓ aparece se um modelo foi treinado e salvo no 'session_state'
-    if 'modelo_treinado' in st.session_state:
-        st.header("Faça uma Nova Predição")
+    try:
+        # Pega os dados do formulário de predição
+        bill_length = float(request.form['bill_length'])
+        bill_depth = float(request.form['bill_depth'])
+        flipper_length = float(request.form['flipper_length'])
+        body_mass = float(request.form['body_mass'])
         
-        # Busca o modelo e as features salvas na sessão
-        modelo_salvo = st.session_state['modelo_treinado']
-        features_salvas = st.session_state['features_modelo']
+        # Monta o DataFrame de 1 linha para o modelo
+        features_predicao = pd.DataFrame(
+            [[bill_length, bill_depth, flipper_length, body_mass]],
+            columns=['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']
+        )
         
-        inputs_predicao = {}
-        st.write("Ajuste os valores para prever a espécie:")
+        # Faz a predição
+        predicao_unica = modelo.predict(features_predicao)
         
-        # Cria dinamicamente N colunas para N sliders
-        col_sliders = st.columns(len(features_salvas))
+        # Salva o resultado na 'session'
+        session['predicao'] = predicao_unica[0]
         
-        # Loop para criar um slider para cada feature que o modelo usou
-        for i, feature in enumerate(features_salvas):
-            min_val = float(df[feature].min())
-            max_val = float(df[feature].max())
-            default_val = float(df[feature].mean())
-            
-            # 'with col_sliders[i]:' coloca o slider na coluna 'i'
-            with col_sliders[i]:
-                inputs_predicao[feature] = st.slider(
-                    label=feature, 
-                    min_value=min_val, 
-                    max_value=max_val, 
-                    value=default_val,
-                    step=0.1
-                )
-        
-        # Botão para fazer a predição
-        if st.button("Prever Espécie"):
-            # 1. Monta um DataFrame de 1 linha com os dados dos sliders
-            df_predicao = pd.DataFrame([inputs_predicao])
-            
-            # 2. Garante que a ordem das colunas é a MESMA que o modelo foi treinado
-            df_predicao = df_predicao[features_salvas] 
-            
-            # 3. Faz a predição
-            predicao_unica = modelo_salvo.predict(df_predicao)
-            predicao_proba = modelo_salvo.predict_proba(df_predicao)
-            
-            # 4. Exibe o resultado
-            st.subheader(f"Resultado da Predição: {predicao_unica[0]}")
-            
-            # 5. Exibe as probabilidades
-            st.write("Probabilidades:")
-            df_proba = pd.DataFrame(predicao_proba, columns=modelo_salvo.classes_)
-            # Transpõe (gira) o dataframe para plotar com Plotly
-            df_proba_transposed = df_proba.T.reset_index()
-            df_proba_transposed.columns = ['Espécie', 'Probabilidade']
-            
-            fig_proba = px.bar(
-                df_proba_transposed, 
-                x='Espécie', 
-                y='Probabilidade',
-                color='Espécie'
-            )
-            st.plotly_chart(fig_proba, use_container_width=True)
+    except Exception as e:
+        print(f"Erro na predição: {e}")
+        session['predicao'] = "Erro nos dados"
+
+    return redirect(url_for('index'))
+
+# --- Ponto de Entrada ---
+if __name__ == '__main__':
+    # Roda a aplicação
+    # debug=True faz o servidor reiniciar automaticamente quando você salva o arquivo
+    app.run(debug=True)
