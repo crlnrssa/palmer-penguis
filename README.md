@@ -4,7 +4,7 @@ Uma aplicação interativa em Python com **Flask** para análise de dados e mode
 
 ---
 
-## 🚀 FUNCIONALIDADES PRINCIPAIS
+## FUNCIONALIDADES PRINCIPAIS
 
 - **Upload de Dados:** Carregue arquivos `.csv` ou use o dataset padrão _Palmer Penguins_.
 - **Visualização Interativa:** Gráficos dinâmicos com `Plotly` (barras e dispersão) renderizados no template.
@@ -15,7 +15,7 @@ Uma aplicação interativa em Python com **Flask** para análise de dados e mode
 
 ---
 
-## 🛠️ TECNOLOGIAS UTILIZADAS
+## TECNOLOGIAS UTILIZADAS
 
 - **Python 3.x:** Linguagem principal
 - **Flask:** Backend web, roteamento e renderização de templates
@@ -27,7 +27,7 @@ Uma aplicação interativa em Python com **Flask** para análise de dados e mode
 
 ---
 
-## ⚙️ INSTALAÇÃO E EXECUÇÃO
+## INSTALAÇÃO E EXECUÇÃO
 
 ### 1. Pré-requisitos
 
@@ -37,10 +37,9 @@ Certifique-se de ter o [Python 3.7+](https://www.python.org/downloads/) instalad
 
 Abra um terminal na pasta do projeto e execute:
 
-```bash
 python -m venv venv
 
-3. Ativação do Ambiente Virtual
+### 3. Ativação do Ambiente Virtual
 
 Windows (PowerShell):
 .\venv\Scripts\activate
@@ -48,12 +47,12 @@ Windows (PowerShell):
 macOS/Linux:
 source venv/bin/activate
 
-4. Instalação das Dependências
+### 4. Instalação das Dependências
 Com o ambiente ativado, instale todas as bibliotecas necessárias:
 
 pip install flask pandas seaborn plotly scikit-learn matplotlib joblibb
 
-5. Execução da Aplicação
+### 5. Execução da Aplicação
 Finalmente, execute a aplicação:
 
 python app.py
